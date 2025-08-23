@@ -1,0 +1,11 @@
+streamlit>=1.36.0
+librosa==0.10.1
+numpy==1.26.4
+numba==0.59.1
+llvmlite==0.42.0
+soundfile==0.12.1
+audioread>=3.0.0
+resampy>=0.4.3
+scipy>=1.10.0
+matplotlib>=3.8.0
+pandas>=2.2.2
