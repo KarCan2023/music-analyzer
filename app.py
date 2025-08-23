@@ -9,6 +9,7 @@ import streamlit as st
 import librosa
 import librosa.display
 import matplotlib.pyplot as plt
+import soundfile as sf
 
 # =============================
 # Configuración general UI
@@ -32,7 +33,7 @@ section.main > div {max-width: 1200px;}
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 st.title("🎵 Analizador de Tempo, Tonalidad y Notas")
-st.caption("Sube tu archivo de audio y obtén BPM, tonalidad y notas (monofónicas). Además, recibe sugerencias de estilos según el análisis.")
+st.caption("Sube tu archivo de audio y obtén BPM, tonalidad y notas (monofónicas). Además, recibe sugerencias de estilos según el análisis. Ahora incluye **separación de stems (HPSS)** para mejorar la detección de notas.")
 
 # =============================
 # Utilidades musicales
@@ -47,7 +48,7 @@ class StyleRule:
     bpm_min: int
     bpm_max: int
     key_mode: str  # "any" | "major" | "minor" | "list"
-    keys: Optional[List[str]] = None  # solo si key_mode == "list" (e.g., ["Am", "Em"])
+    keys: Optional[List[str]] = None  # solo si key_mode == "list" (e.g., ["Am", "Em"]) 
 
 # =============================
 # Seed de estilos (editable en UI). También se carga desde JSON.
@@ -245,6 +246,19 @@ def extract_notes(y: np.ndarray, sr: int, fmin: str = 'C2', fmax: str = 'C7', fr
     return df
 
 # =============================
+# Separación de stems (HPSS)
+# =============================
+
+def separate_hpss(y: np.ndarray, margin_h: float = 1.0, margin_p: float = 1.0) -> Tuple[np.ndarray, np.ndarray]:
+    """Devuelve (y_harm, y_perc) usando HPSS de librosa."""
+    y_harm, y_perc = librosa.effects.hpss(y, margin=(margin_h, margin_p))
+    # normalizar cada stem
+    for arr in (y_harm, y_perc):
+        if np.max(np.abs(arr)) > 0:
+            arr /= np.max(np.abs(arr))
+    return y_harm, y_perc
+
+# =============================
 # Recomendador de estilos
 # =============================
 
@@ -253,7 +267,8 @@ def key_to_mode(key_str: str) -> str:
 
 def normalize_key_str(key_str: str) -> str:
     # "C# minor" → "C# minor" | "A minor" etc.
-    return key_str.replace("\n", " ").strip()
+    return key_str.replace("
+", " ").strip()
 
 @st.cache_data(show_spinner=False)
 def recommend_styles(bpm: float, key_str: str, styles_df: pd.DataFrame, top_k: int = 5) -> pd.DataFrame:
@@ -300,7 +315,16 @@ with st.sidebar:
     max_seconds = st.slider("Máx. duración a analizar (seg)", 10, 600, 180, 10, help="Recortar para acelerar el cálculo")
     sr = st.selectbox("Sample rate (Hz)", [22050, 32000, 44100], index=2)
     show_plots = st.checkbox("Mostrar visualizaciones (onda, cromagrama, notas)", value=True)
-    extract_notes_flag = st.checkbox("Extraer notas (PYIN, monofónico)", value=True)
+
+    st.markdown("---")
+    st.subheader("🪄 Stems (HPSS)")
+    use_hpss = st.checkbox("Separar en Harmónica / Percusiva (HPSS)", value=True)
+    margin_h = st.slider("Margen armónico", 0.5, 5.0, 1.0, 0.1, help="Mayor margen → más agresivo hacia lo armónico")
+    margin_p = st.slider("Margen percusivo", 0.5, 5.0, 1.0, 0.1, help="Mayor margen → más agresivo hacia lo percusivo")
+
+    st.markdown("---")
+    st.subheader("🎼 Notas (PYIN)")
+    extract_notes_flag = st.checkbox("Extraer notas (monofónico)", value=True)
     pyin_prob = st.slider("Umbral de probabilidad PYIN", 0.0, 1.0, 0.70, 0.05)
 
     st.markdown("---")
@@ -336,11 +360,30 @@ if uploaded:
         st.write({"sample_rate": sr_eff, "duración_s": round(len(y)/sr_eff, 2), "frames": len(y)})
 
     # =============================
-    # Análisis principal
+    # Separación (si aplica) y elección de señal a analizar
+    # =============================
+    stems_dict = {"Original": y}
+    if use_hpss:
+        with st.spinner("Separando (HPSS)…"):
+            y_harm, y_perc = separate_hpss(y, margin_h=margin_h, margin_p=margin_p)
+            stems_dict["Harmónica"] = y_harm
+            stems_dict["Percusiva"] = y_perc
+
+    sel = st.radio("Señal para analizar", list(stems_dict.keys()), index=0, horizontal=True)
+    y_use = stems_dict[sel]
+
+    with st.expander("Descargar stems (WAV)"):
+        for name, sig in stems_dict.items():
+            buf = io.BytesIO()
+            sf.write(buf, sig, sr_eff, format='WAV')
+            st.download_button(f"Descargar {name}.wav", data=buf.getvalue(), file_name=f"{name.lower()}.wav", mime="audio/wav")
+
+    # =============================
+    # Análisis principal (sobre y_use)
     # =============================
     with st.spinner("Analizando tempo y tonalidad..."):
-        bpm, beat_times = estimate_bpm(y, sr_eff)
-        key_str, key_conf = estimate_key(y, sr_eff)
+        bpm, beat_times = estimate_bpm(y_use, sr_eff)
+        key_str, key_conf = estimate_key(y_use, sr_eff)
 
     # Métricas
     m1, m2 = st.columns(2)
@@ -372,9 +415,9 @@ if uploaded:
         st.subheader("📊 Visualizaciones")
         c1, c2 = st.columns(2)
         with c1:
-            st.caption("Onda con beats")
+            st.caption(f"Onda con beats — señal: {sel}")
             fig, ax = plt.subplots(figsize=(8, 3))
-            librosa.display.waveshow(y, sr=sr_eff, ax=ax)
+            librosa.display.waveshow(y_use, sr=sr_eff, ax=ax)
             for bt in beat_times:
                 ax.axvline(bt, alpha=0.3, linestyle='--')
             ax.set_xlabel("Tiempo (s)")
@@ -383,7 +426,7 @@ if uploaded:
 
         with c2:
             st.caption("Cromagrama CQT (promedio usado para clave)")
-            chroma = librosa.feature.chroma_cqt(y=y, sr=sr_eff)
+            chroma = librosa.feature.chroma_cqt(y=y_use, sr=sr_eff)
             fig2, ax2 = plt.subplots(figsize=(8, 3))
             img = librosa.display.specshow(chroma, x_axis='time', y_axis='chroma', cmap='magma', ax=ax2)
             ax2.set_title('Chroma CQT')
@@ -397,9 +440,9 @@ if uploaded:
         st.markdown("---")
         st.subheader("🎼 Notas detectadas (monofónico)")
         with st.spinner("Extrayendo notas con PYIN…"):
-            notes_df = extract_notes(y, sr_eff, threshold_prob=pyin_prob)
+            notes_df = extract_notes(y_use, sr_eff, threshold_prob=pyin_prob)
         if notes_df.empty:
-            st.info("No se detectaron notas confiables. Si tu audio es polifónico (muchas fuentes) o tiene mezcla muy densa, el método puede fallar. Prueba con una pista monofónica o baja el umbral.")
+            st.info("No se detectaron notas confiables. Si tu audio es polifónico (muchas fuentes) o tiene mezcla muy densa, el método puede fallar. Prueba con la **señal Harmónica** o baja el umbral.")
         else:
             st.dataframe(notes_df, use_container_width=True)
             # Descarga CSV
@@ -417,4 +460,4 @@ if uploaded:
 
 # Footer
 st.markdown("---")
-st.caption("Limitaciones: la detección de tonalidad en música polifónica puede ser ambigua; la extracción de notas con PYIN funciona mejor en señales MONOFÓNICAS (voz, bajo, lead sin acompañamiento). Para stems, considera separación previa (e.g., vocal/bajo) antes del análisis.")
+st.caption("Limitaciones: la detección de tonalidad en música polifónica puede ser ambigua; la extracción de notas con PYIN funciona mejor en señales MONOFÓNICAS. **HPSS integrado** ayuda (usa la señal Harmónica). Para separación Vocal/Instrumental de mayor calidad, puedes integrar Spleeter/Demucs fuera de este entorno por su tamaño de modelos.")
