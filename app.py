@@ -1,94 +1,90 @@
-import streamlit as st
-import librosa
-import librosa.display
-import numpy as np
-import io
-import matplotlib.pyplot as plt
+import tempfile
+# Análisis principal
+# =============================
+with st.spinner("Analizando tempo y tonalidad..."):
+bpm, beat_times = estimate_bpm(y, sr_eff)
+key_str, key_conf = estimate_key(y, sr_eff)
 
-# Título de la aplicación
-st.title("🎶 Analizador Musical")
 
-# Subtítulo con una breve descripción
-st.markdown("""
-    Sube un archivo de audio (.wav o .mp3) para analizar su **BPM** y **Tonalidad**.
-""")
+# Métricas
+m1, m2 = st.columns(2)
+with m1:
+st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+st.metric("BPM (estimado)", f"{bpm:.1f}")
+st.markdown('</div>', unsafe_allow_html=True)
+with m2:
+st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+st.metric("Tonalidad (clave)", key_str, help="Método Krumhansl-Schmuckler sobre cromas CQT")
+st.caption(f"Confianza relativa: {key_conf:.3f} (Δ corr. top1-top2)")
+st.markdown('</div>', unsafe_allow_html=True)
 
-# Widget para subir archivos
-uploaded_file = st.file_uploader(
-    "Elige un archivo de audio", 
-    type=['mp3', 'wav'],
-    help="Sube un archivo de música para el análisis. Se recomiendan archivos de menor duración para un análisis más rápido."
+
+# Recomendaciones
+st.subheader("🎯 Estilos recomendados")
+recs = recommend_styles(bpm, key_str, styles_df)
+if recs.empty:
+st.info("No hay recomendaciones con la configuración actual.")
+else:
+for _, row in recs.iterrows():
+st.markdown(
+f"<span class='badge'>**{row['name']}** · {int(row['bpm_min'])}-{int(row['bpm_max'])} BPM · modo: {row['key_mode']} · score: {row['score']:.2f}</span>",
+unsafe_allow_html=True,
 )
 
-# Verifica si se ha subido un archivo
-if uploaded_file is not None:
-    # Muestra un mensaje de éxito
-    st.success("Archivo subido con éxito. Analizando...")
 
-    # Usa un spinner mientras se procesa el archivo
-    with st.spinner('Cargando y procesando el archivo de audio...'):
-        # Leer el archivo de audio cargado en bytes
-        audio_bytes = uploaded_file.read()
-        
-        try:
-            # Cargar el archivo de audio usando librosa
-            # La función `load` necesita una ruta o un objeto similar a un archivo, 
-            # por lo que usamos `io.BytesIO`
-            y, sr = librosa.load(io.BytesIO(audio_bytes), sr=None)
-
-            # --- Análisis del BPM (Beats Per Minute) ---
-            # Se usa `librosa.beat.tempo` para estimar el tempo del audio.
-            # El array resultante a menudo contiene múltiples estimaciones; se toma la primera.
-            tempo, _ = librosa.beat.tempo(y=y, sr=sr, start_bpm=80, end_bpm=200)
-            bpm = tempo[0]
-
-            # --- Análisis de la Tonalidad ---
-            # 1. Se calcula el espectrograma de croma (chroma)
-            # El croma representa la intensidad de cada una de las 12 notas (C, C#, D, etc.)
-            chroma = librosa.feature.chroma_stft(y=y, sr=sr)
-            
-            # 2. Se estima la tonalidad (key) a partir del espectrograma de croma.
-            # `librosa.key_to_notes` convierte el índice de la nota a su nombre.
-            key_index = np.argmax(np.mean(chroma, axis=1))
-            key = librosa.key_to_note(key_index)
-
-            # --- Mostrar los resultados en la interfaz ---
-            st.header("Resultados del Análisis")
-            
-            # Usa `st.metric` para mostrar el BPM de manera destacada
-            st.metric("BPM (Pulsos por Minuto)", f"{int(bpm)}", "Estimado")
-            
-            # Muestra la tonalidad
-            st.metric("Tonalidad (Key)", key)
-
-            # --- Visualizaciones ---
-            st.header("Visualizaciones del Audio")
-            
-            # 1. Gráfico de la forma de onda (waveform)
-            # Muestra la amplitud del audio a lo largo del tiempo.
-            fig_waveform, ax_waveform = plt.subplots(figsize=(10, 4))
-            librosa.display.waveshow(y, sr=sr, ax=ax_waveform, x_axis='time')
-            ax_waveform.set_title('Forma de Onda del Audio')
-            ax_waveform.set_xlabel('Tiempo (s)')
-            ax_waveform.set_ylabel('Amplitud')
-            st.pyplot(fig_waveform)
-            plt.close(fig_waveform) # Cierra la figura para evitar problemas con Streamlit
-
-            # 2. Gráfico del Cromagrama
-            # Muestra la intensidad de las 12 clases de tonos (C, C#, D, etc.) a lo largo del tiempo.
-            fig_chroma, ax_chroma = plt.subplots(figsize=(10, 4))
-            img = librosa.display.specshow(chroma, y_axis='chroma', x_axis='time', sr=sr, ax=ax_chroma)
-            ax_chroma.set_title('Cromagrama (Intensidad de Notas)')
-            ax_chroma.set_xlabel('Tiempo (s)')
-            ax_chroma.set_ylabel('Notas')
-            st.pyplot(fig_chroma)
-            plt.close(fig_chroma)
-
-        except Exception as e:
-            # Manejo de errores en caso de que el análisis falle
-            st.error(f"Ocurrió un error al procesar el archivo: {e}")
-            st.info("Asegúrate de que el archivo no esté corrupto y sea un formato de audio válido (.wav o .mp3).")
-
-# Sección de pie de página
+# Visualizaciones
+if show_plots:
 st.markdown("---")
-st.markdown("Creado con `streamlit` y `librosa`.")
+st.subheader("📊 Visualizaciones")
+c1, c2 = st.columns(2)
+with c1:
+st.caption("Onda con beats")
+fig, ax = plt.subplots(figsize=(8, 3))
+librosa.display.waveshow(y, sr=sr_eff, ax=ax)
+for bt in beat_times:
+ax.axvline(bt, alpha=0.3, linestyle='--')
+ax.set_xlabel("Tiempo (s)")
+ax.set_ylabel("Amplitud")
+st.pyplot(fig, use_container_width=True)
+
+
+with c2:
+st.caption("Cromagrama CQT (promedio usado para clave)")
+chroma = librosa.feature.chroma_cqt(y=y, sr=sr_eff)
+fig2, ax2 = plt.subplots(figsize=(8, 3))
+img = librosa.display.specshow(chroma, x_axis='time', y_axis='chroma', cmap='magma', ax=ax2)
+ax2.set_title('Chroma CQT')
+fig2.colorbar(img, ax=ax2, format='%+0.2f')
+st.pyplot(fig2, use_container_width=True)
+
+
+# =============================
+# Extracción de notas (opcional)
+# =============================
+if extract_notes_flag:
+st.markdown("---")
+st.subheader("🎼 Notas detectadas (monofónico)")
+with st.spinner("Extrayendo notas con PYIN…"):
+notes_df = extract_notes(y, sr_eff, threshold_prob=pyin_prob)
+if notes_df.empty:
+st.info("No se detectaron notas confiables. Si tu audio es polifónico (muchas fuentes) o tiene mezcla muy densa, el método puede fallar. Prueba con una pista monofónica o baja el umbral.")
+else:
+st.dataframe(notes_df, use_container_width=True)
+# Descarga CSV
+csv = notes_df.to_csv(index=False).encode('utf-8')
+st.download_button("Descargar notas CSV", data=csv, file_name="notas_detectadas.csv", mime="text/csv")
+
+
+if show_plots:
+st.caption("Notas vs Tiempo (piano-roll simplificado)")
+fig3, ax3 = plt.subplots(figsize=(10, 3))
+for _, r in notes_df.iterrows():
+ax3.hlines(r["midi"], r["start_s"], r["end_s"], linewidth=4)
+ax3.set_xlabel("Tiempo (s)")
+ax3.set_ylabel("MIDI note")
+st.pyplot(fig3, use_container_width=True)
+
+
+# Footer
+st.markdown("---")
+st.caption("Limitaciones: la detección de tonalidad en música polifónica puede ser ambigua; la extracción de notas con PYIN funciona mejor en señales MONOFÓNICAS (voz, bajo, lead sin acompañamiento). Para stems, considera separación previa (e.g., vocal/bajo) antes del análisis.")
