@@ -1,7 +1,7 @@
 streamlit>=1.36.0
 numpy>=1.26.4
-scipy>=1.11.4
 soundfile>=0.12.1
 pydub>=0.25.1
+pyaudioop>=0.2.0
 matplotlib>=3.8.0
 pandas>=2.2.2

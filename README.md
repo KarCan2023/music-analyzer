@@ -1,17 +1,17 @@
-# 🎶 Analizador Musical (Lite) — v1.2
-Para Streamlit Cloud, sin librosa/numba. Formatos: mp3/wav/m4a/ogg con pydub+ffmpeg.
+# 🎶 Analizador Musical (Ultralite) — v1.2.1
+**Cero SciPy y cero Librosa.** Compatible con Python **3.11–3.13**.  
+Soporta MP3/M4A/OGG/WAV con **pydub + ffmpeg**. Para Python 3.13 incluimos **pyaudioop** (sustituye al módulo stdlib removido `audioop`).
 
-## Despliegue
-1) Sube estos archivos a un repo (raíz).  
-2) Streamlit Cloud → New app → `app.py` → Python 3.11.  
-3) **packages.txt** instala `ffmpeg` y `libsndfile1`.
+## Despliegue (GitHub → Streamlit Cloud)
+1. Sube todos los archivos al **raíz** de tu repo.
+2. En Streamlit Cloud: New app → `app.py`. Puedes usar **Python 3.13** o 3.11.
+3. Este repo incluye `packages.txt` para instalar **ffmpeg** y **libsndfile1** (decodificación).
 
-## Funciones
-- **BPM**: spectral flux + autocorrelación (60–180 bpm, con ajuste half/double).  
-- **Tonalidad**: cromagrama 12-TET + perfiles Krumhansl (mayor/menor).  
-- **Notas (opcional)**: YIN-lite monofónico con segmentación.
+## Funciones incluidas
+- **BPM**: STFT (NumPy) + **Spectral Flux** + **Autocorrelación** (con ajuste half/double).
+- **Tonalidad**: cromagrama 12‑TET + **Krumhansl** (mayor/menor).
+- **Notas (opcional)**: **YIN‑lite** monofónico + segmentación.
 
-## Consejos
-- Limita **Máx. duración** a 60–90s para análisis rápido.  
-- Notas: usa pistas **monofónicas** (voz, bajo, lead).
-
+## Recomendaciones
+- Máx. duración 60–90s para ir rápido.
+- Notas: usa pistas **monofónicas** para mejor precisión.
