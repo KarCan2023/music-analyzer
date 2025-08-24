@@ -1,17 +1,19 @@
-# 🎶 Analizador Musical (Ultralite) — v1.2.1
-**Cero SciPy y cero Librosa.** Compatible con Python **3.11–3.13**.  
-Soporta MP3/M4A/OGG/WAV con **pydub + ffmpeg**. Para Python 3.13 incluimos **pyaudioop** (sustituye al módulo stdlib removido `audioop`).
+# 🎶 Analizador Musical (Balanced) — v1.2.2
+Equilibrado para Streamlit Cloud: **BPM + Tonalidad + Recomendador**.  
+Sin extracción de **notas** (lo más pesado) para evitar problemas de instalación/tiempo.
 
-## Despliegue (GitHub → Streamlit Cloud)
-1. Sube todos los archivos al **raíz** de tu repo.
-2. En Streamlit Cloud: New app → `app.py`. Puedes usar **Python 3.13** o 3.11.
-3. Este repo incluye `packages.txt` para instalar **ffmpeg** y **libsndfile1** (decodificación).
+## Deploy (GitHub → Streamlit Cloud)
+1) Sube estos archivos al **raíz** del repo.  
+2) En Streamlit Cloud: New app → `app.py`.  
+3) **Runtime**: Python 3.13 (o 3.11). `requirements.txt` incluye **pyaudioop** (necesario para pydub en 3.13).  
+4) `packages.txt` instala **ffmpeg** y **libsndfile1**.
 
-## Funciones incluidas
-- **BPM**: STFT (NumPy) + **Spectral Flux** + **Autocorrelación** (con ajuste half/double).
-- **Tonalidad**: cromagrama 12‑TET + **Krumhansl** (mayor/menor).
-- **Notas (opcional)**: **YIN‑lite** monofónico + segmentación.
+## Qué hace
+- **BPM**: flux + autocorrelación (ajuste half/double).  
+- **Tonalidad**: cromagrama 12‑TET + Krumhansl (mayor/menor).  
+- **Recomendador**: sugiere géneros por rango BPM y modo (mayor/menor).
 
-## Recomendaciones
-- Máx. duración 60–90s para ir rápido.
-- Notas: usa pistas **monofónicas** para mejor precisión.
+## Tips
+- Usa **SR 22.05 kHz** y **60–90s** de audio para ir fluido.  
+- Si el BPM sale en doble/mitad, interpreta según el género (ej. 70 ↔ 140).
+
